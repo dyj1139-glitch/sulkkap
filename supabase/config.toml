@@ -1,0 +1,2 @@
+[functions.super-task]
+verify_jwt = false

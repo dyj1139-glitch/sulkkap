@@ -1,7 +1,10 @@
 // 술깝 Groq 연결 + 분석 상태 표시 버전 — src/App.jsx 전체 교체용
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { db, call, ensureGuest, passwordAuth, restore, logout, googleLogin, finishLogin, queueReceipt, syncReceipts, shareUrl } from './social.js';
+import { Room, ReceiptQR, socialImage } from './Social.jsx';
+import MyPage from './MyPage.jsx';
 
-// 이 파일 하나로 교체하세요. App.css를 import할 필요가 없습니다.
+// 함께 제공한 src 폴더 전체를 교체하세요. JSX 컴포넌트는 .jsx 확장자를 유지합니다.
 const LOGO_FONT_CSS = "https://cdn.jsdelivr.net/gh/neodgm/neodgm-webfont@1.601/neodgm/style.css";
 const RECEIPT_FONT_CSS = "https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400&display=swap";
 const RANK_SOURCE = "https://doi.org/10.3390/ijerph18126433";
@@ -266,7 +269,19 @@ function MissionChoices({ available = MISSIONS.map(m => m.id), checked, onToggle
 const SUPABASE_URL = "https://houaxqkekipxdvqeppkh.supabase.co";
 // 공개용 키입니다. secret/service_role 키로 바꾸지 마세요.
 const SUPABASE_KEY = "sb_publishable_tf9Z2v4pF51pxYmYhMvH3g_DXcTFetc";
+const AUTH_KEY = "sulkkap:auth";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readAuthSession() { return null; }
+async function signInWithPassword(email,password) { return passwordAuth(email,password,false); }
+async function signUpWithPassword(email,password) { return passwordAuth(email,password,true); }
+async function signOutSession() { return logout(); }
+async function restoreAuthSession() { return restore(); }
+function EyeIcon({ open }) {
+  return open
+    ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></svg>
+    : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 3l18 18" /><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" /><path d="M9.9 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.1 4.1" /><path d="M6.1 6.1A17.5 17.5 0 0 0 2 12s3.5 7 10 7a10.4 10.4 0 0 0 4.2-.9" /></svg>;
+}
 async function rpc(name, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
@@ -334,25 +349,20 @@ function normalizeRecord(raw) {
   return { id: typeof raw.id === "string" ? raw.id : uid(), date: raw.date, occasion: typeof raw.occasion === "string" ? raw.occasion.trim().slice(0, 40) || "우리의 술자리" : "우리의 술자리", people: raw.people, items,
     total, personal, minutes: calculateLifeMinutes(personal), rank: estimatePercentile(personal) };
 }
-export async function createShareLink({ record, purpose, missions }) {
-  if (!["result", "mission"].includes(purpose) || !Array.isArray(missions) || missions.length > MISSIONS.length ||
-      new Set(missions).size !== missions.length || missions.some(id => !MISSIONS.some(m => m.id === id)) ||
-      (purpose === "result" && missions.length !== 0) || (purpose === "mission" && missions.length === 0)) throw new Error("서로 다른 미션을 하나 이상 골라주세요.");
-  const clean = normalizeRecord(record);
-  const id = await rpc("create_sulkkap_share", { p_receipt: { ...clean, schemaVersion: 1 }, p_purpose: purpose, p_missions: missions });
-  if (typeof id !== "string" || !UUID_RE.test(id)) throw new Error("공유 링크 응답이 올바르지 않아요.");
-  const url = new URL(window.location.href); url.search = ""; url.hash = ""; url.searchParams.set("share", id);
-  return { id, url: url.href };
+export async function createShareLink({record,purpose,missions,message=""}) {
+  const clean=normalizeRecord(record); await ensureGuest();
+  const id=await call('sk_create_room',{p_record:clean,p_purpose:purpose,p_message:message.trim(),p_missions:missions});
+  if(!UUID_RE.test(id)) throw new Error('공유 응답이 올바르지 않아요.');
+  return {id,url:shareUrl(id)};
 }
 async function readShare(id) {
-  if (!UUID_RE.test(id)) throw new Error("올바르지 않은 공유 링크예요.");
-  const data = await rpc("get_sulkkap_share", { p_id: id });
-  if (!data) throw new Error("영수증을 찾을 수 없어요. 링크를 다시 확인해주세요.");
-  if (!["result", "mission"].includes(data.purpose) || !Array.isArray(data.missions) ||
-      data.missions.length > MISSIONS.length || new Set(data.missions).size !== data.missions.length ||
-      data.missions.some(id => !MISSIONS.some(m => m.id === id)) ||
-      (data.purpose === "result" && data.missions.length) || (data.purpose === "mission" && !data.missions.length)) throw new Error("미션 정보가 올바르지 않아요.");
-  return { ...data, id, receipt: { ...normalizeRecord(data.receipt), id } };
+  if(!UUID_RE.test(id))throw new Error('올바르지 않은 공유 링크예요.');
+  let data;
+  try { data=await call('sk_read_room',{p_id:id}); } catch(e) { if(e.code !== 'PGRST202') throw e; }
+  if(data)return {...data,receipt:{...normalizeRecord(data.receipt),id},social:true};
+  data=await rpc('get_sulkkap_share',{p_id:id});
+  if(!data||!Array.isArray(data.missions)||data.missions.some(id=>!MISSIONS.some(m=>m.id===id)))throw new Error('영수증을 찾지 못했어요.');
+  return {...data,id,receipt:{...normalizeRecord(data.receipt),id},social:false};
 }
 function readChecks(id, missions) {
   try { const value = JSON.parse(localStorage.getItem(`sulkkap:missions:${id}`) || "[]"); return Array.isArray(value) ? [...new Set(value)].filter(v => missions.includes(v)) : []; }
@@ -414,6 +424,8 @@ const CSS = `
 .sk .review-stage h1{font-size:26px;margin-bottom:8px}.sk .review-stage .sub{font-size:14px;margin-bottom:16px}.sk .review-stage .step-dots{margin-bottom:16px}.sk .review-stage .input-context{margin-bottom:4px}
 
 .sk .mission-group{margin-top:26px}.sk .mission-group h3{font-size:16px;margin:0 0 7px;letter-spacing:-.4px}.sk .mission-group>p{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 7px}.sk .mission-group-big .mission-reward{font-size:18px;font-weight:700;color:var(--green)}.sk .mission-reward{font-size:14px;font-weight:600;white-space:nowrap}.sk .mission-group .mission-row{padding:14px 0;gap:10px}.sk .mission-submit{position:sticky;bottom:0;z-index:3;margin-top:20px;box-shadow:0 -10px 0 #ecedec}.sk .mission-group .mission-row strong{word-break:keep-all;overflow-wrap:anywhere}
+
+.sk .sk-auth{border:0;background:transparent;min-width:44px;min-height:44px;padding:8px 0;font-size:13px;color:#525f4d;text-align:right;max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.sk-header>:first-child{flex:1}.sk .sk-logo{flex:0 0 auto}.sk .sk-auth-email{color:var(--green);font-size:12px}.sk .auth-sheet .auth-tabs{display:flex;gap:8px;margin:0 0 18px}.sk .auth-sheet .auth-tabs button{flex:1;min-height:44px;border:1px solid #c0c7b7;border-radius:5px;background:transparent;font-size:14px}.sk .auth-sheet .auth-tabs button[aria-pressed=true]{background:#e4ebe6;border-color:var(--green);color:var(--green);font-weight:700}.sk .auth-sheet .password-field{position:relative}.sk .auth-sheet .password-field input{padding-right:48px}.sk .auth-sheet .password-toggle{position:absolute;right:4px;bottom:2px;border:0;background:transparent;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;color:#5f685f;padding:0}.sk .auth-sheet .primary{margin-top:20px}.sk .auth-sheet .auth-switch{margin-top:14px;text-align:center}.sk .auth-account{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:16px 0;margin:4px 0 18px}.sk .auth-account p{margin:0;font-size:14px;line-height:1.7;overflow-wrap:anywhere}.sk .auth-account small{display:block;color:var(--muted);font-size:12px;margin-top:6px}.sk .auth-account .secondary{margin-top:16px}
 
 `;
 
@@ -541,6 +553,8 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [friendMessage,setFriendMessage]=useState("");
+  const [cloudStatus,setCloudStatus]=useState("");
   const [chosenMissions, setChosenMissions] = useState(["meal"]);
   const [shareStatus, setShareStatus] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
@@ -559,6 +573,17 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
   const openerRef = useRef(null);
   const editorRef = useRef(null);
   const addRef = useRef(null);
+  const authRef = useRef(null);
+  const [authUser, setAuthUser] = useState(() => readAuthSession()?.user || null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const myReturnPage = useRef(0);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authShowPassword, setAuthShowPassword] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authStatus, setAuthStatus] = useState("");
   const activeItems = items;
   const unresolved = items.filter(i => itemError(i));
   const valid = activeItems.length > 0 && activeItems.length <= 60 && activeItems.every((i) => !itemError(i));
@@ -567,7 +592,7 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
   useEffect(() => {
     if (shared || new URLSearchParams(window.location.search).has("share")) return;
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 4, occasion, people, items, narrative, page: page === 4 ? 3 : page }));
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 4, occasion, people, items, narrative, page: page === 6 ? myReturnPage.current : page === 4 ? 3 : page }));
       setDraftWarning("");
     } catch { setDraftWarning("이 브라우저에서는 작성 내용을 저장할 수 없어요. 새로고침하면 입력이 사라질 수 있어요."); }
   }, [occasion, people, items, narrative, page, shared]);
@@ -606,6 +631,14 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     const timeout = setTimeout(() => { if (alive) setFontStatus((v) => v === "loading" ? "error" : v); }, 15000);
     return () => { alive = false; clearTimeout(timeout); cleanups.forEach((clean) => clean()); };
   }, []);
+  useEffect(() => {
+    let alive=true;
+    restoreAuthSession().then(s=>{if(alive)setAuthUser(s?.user||null)}).catch(()=>{if(alive)setAuthError('로그인 상태를 확인하지 못했어요.');});
+    const {data}=db.auth.onAuthStateChange((_event,s)=>{if(alive)setAuthUser(s&&!s.user.is_anonymous?s.user:null)});
+    return()=>{alive=false;data.subscription.unsubscribe()};
+  },[]);
+  useEffect(()=>{if(!authUser)return;let alive=true;finishLogin().then(()=>{if(alive)setCloudStatus('로그인 전 기록까지 계정에 연결했어요.')}).catch(e=>{if(alive)setCloudStatus('기록 연결을 완료하지 못했어요. 마이페이지에서 새로고침해주세요. '+e.message)});return()=>alive=false},[authUser?.id]);
+  useEffect(()=>{if(!record||shared)return;let alive=true;try{queueReceipt(record);setCloudStatus('기록을 보관하는 중…');syncReceipts().then(()=>{if(alive)setCloudStatus(authUser?'내 계정에 보관했어요.':'이 브라우저의 게스트 기록으로 보관했어요. 로그인하면 이어받을 수 있어요.')}).catch(()=>{if(alive)setCloudStatus('이 브라우저에 보관했어요. 서버 저장은 아직 완료되지 않았어요.')});}catch{setCloudStatus('기록을 보관하지 못했어요. 영수증 이미지를 저장해주세요.')}return()=>alive=false},[record?.id,shared?.id]);
   useLayoutEffect(() => {
     if (page !== 4 || !receiptRef.current) return;
     const paper = receiptRef.current;
@@ -635,13 +668,15 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     return () => { alive = false; };
   }, [record, fontStatus]);
   useEffect(() => {
-    if (!sheetOpen && !addOpen && !entryEditor) return;
-    const modal = sheetOpen ? sheetRef.current : addOpen ? addRef.current : editorRef.current;
+    if (!sheetOpen && !addOpen && !entryEditor && !authOpen) return;
+    const modal = sheetOpen ? sheetRef.current : addOpen ? addRef.current : entryEditor ? editorRef.current : authRef.current;
     const old = document.body.style.overflow; document.body.style.overflow = "hidden";
     const previousFocus = document.activeElement;
-    modal?.querySelector("button")?.focus();
+    modal?.querySelector("button,input")?.focus();
     const key = (e) => {
-      if (e.key === "Escape" && !shareLock.current) { setSheetOpen(false); setAddOpen(false); setEntryEditor(null); }
+      if (e.key === "Escape" && !shareLock.current && !authBusy) {
+        setSheetOpen(false); setAddOpen(false); setEntryEditor(null); setAuthOpen(false);
+      }
       if (e.key !== "Tab") return;
       const nodes = Array.from(modal?.querySelectorAll('button:not(:disabled),textarea:not(:disabled),input:not(:disabled),select:not(:disabled),a[href]') || []);
       const first = nodes[0], last = nodes[nodes.length - 1];
@@ -650,8 +685,63 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     };
     document.addEventListener("keydown", key);
     return () => { document.body.style.overflow = old; document.removeEventListener("keydown", key); if (previousFocus?.isConnected) previousFocus.focus(); };
-  }, [sheetOpen, addOpen, entryEditor?.item.id]);
+  }, [sheetOpen, addOpen, entryEditor?.item.id, authOpen, authBusy]);
   const move = (next) => { setError(""); setStatus(""); setManualCopy(false); setExamplePending(false); setPage(next); };
+  const openMyPage = () => { myReturnPage.current = page === 6 ? myReturnPage.current : page; setAuthError(''); setAuthOpen(false); move(6); };
+  const openSavedReceipt = raw => { try { const r=normalizeRecord(raw); window.history.replaceState(null,'',window.location.pathname); setShared(null); setPreparedLink(null); setRecord(r); setPrinting(true); move(4); } catch { setAuthError('저장된 영수증을 확인하지 못했어요.'); } };
+  const openAuth = (mode = "login") => {
+    setAuthMode(mode);
+    setAuthError("");
+    setAuthStatus("");
+    setAuthShowPassword(false);
+    if (!authUser) { setAuthEmail(""); setAuthPassword(""); }
+    setAuthOpen(true);
+  };
+  const closeAuth = () => {
+    if (authBusy) return;
+    setAuthOpen(false);
+    setAuthError("");
+    setAuthStatus("");
+    setAuthPassword("");
+    setAuthShowPassword(false);
+  };
+  const submitAuth = async (e) => {
+    e.preventDefault();
+    if (authBusy) return;
+    const email = authEmail.trim();
+    const password = authPassword;
+    if (!email || !email.includes("@")) { setAuthError("이메일 주소를 확인해주세요."); return; }
+    if (password.length < 6) { setAuthError("비밀번호는 6자 이상으로 입력해주세요."); return; }
+    setAuthBusy(true); setAuthError(""); setAuthStatus("");
+    try {
+      const session = authMode === "signup"
+        ? await signUpWithPassword(email, password)
+        : await signInWithPassword(email, password);
+      if (!session?.user) throw new Error("로그인에 실패했어요. 잠시 후 다시 시도해주세요.");
+      setAuthUser(session.user);
+      setAuthPassword("");
+      setAuthShowPassword(false);
+      setAuthStatus(authMode === "signup" ? "가입했어요. 이제 로그인된 상태예요." : "로그인했어요.");
+      setAuthOpen(false);
+    } catch (err) {
+      setAuthError(err.message || "잠시 후 다시 시도해주세요.");
+    } finally { setAuthBusy(false); }
+  };
+  const logoutAuth = async () => {
+    if (authBusy) return;
+    setAuthBusy(true); setAuthError("");
+    try {
+      await signOutSession(readAuthSession());
+      setAuthUser(null);
+      setAuthEmail("");
+      setAuthPassword("");
+      setAuthMode("login");
+      setAuthStatus("로그아웃했어요.");
+      setAuthOpen(false); if(page === 6) move(myReturnPage.current);
+    } catch {
+      setAuthError("로그아웃하지 못했어요. 잠시 후 다시 시도해주세요.");
+    } finally { setAuthBusy(false); }
+  };
   const changeItem = (id, field, value) => {
     setItems(old => old.map(i => i.id === id ? patchEntry(i, field, value) : i));
   };
@@ -744,7 +834,10 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
   const save = async () => {
     setSaving(true); setStatus("");
     try {
-      const blob = imageBlob || await receiptImage(record);
+      let blob = imageBlob || await receiptImage(record);
+      let urlForQR=shared?shareUrl(shared.id):activeLink;
+      // Save the receipt without a QR until a working share link exists.
+      if(urlForQR)blob=await socialImage(blob,urlForQR,record,false);
       const url = URL.createObjectURL(blob); const a = document.createElement("a");
       a.href = url; a.download = `술깝-${record.date}.png`; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 10000); setStatus("영수증 이미지 저장을 요청했어요.");
@@ -755,13 +848,13 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     if (!window.confirm("입력한 내용을 지우고 처음부터 시작할까요?")) return;
     setOccasion(""); setPeople(1); setItems([]); setNarrative(""); setInputStatus(""); setRecord(null); move(0);
   };
-  const linkKey = record ? JSON.stringify([record.id, sheetOpen ? "mission" : "result", sheetOpen ? [...chosenMissions].sort() : []]) : "";
-  const activeLink = preparedLink?.key === linkKey ? preparedLink.url : "";
-  const shareText = record ? `${sheetOpen ? "우리, 다음엔 이 미션 같이 해볼까?" : "내 술깝은 이 정도. 너는?"}\n[${record.occasion || "우리의 술자리"}]\n음주량 기준 추정 ${rankLabel(record)}\n${RANK_NOTE}\n${activeLink}\n\n${NOTICE}` : "";
+  const linkKey = record ? JSON.stringify([record.id, friendMessage, sheetOpen ? "mission" : "result", sheetOpen ? [...chosenMissions].sort() : []]) : "";
+  const activeLink = preparedLink?.key === linkKey ? preparedLink.url : linkCache.current.get(linkKey)?.url || "";
+  const shareText = record ? `${sheetOpen ? "우리, 다음엔 이 미션 같이 해볼까?" : "내 술깝은 이 정도. 너는?"}\n[${record.occasion || "우리의 술자리"}]\n음주량 기준 추정 ${rankLabel(record)}\n${RANK_NOTE}\n${friendMessage ? friendMessage + "\n" : ""}${activeLink}\n\n${NOTICE}` : "";
   const openShare = () => { setShareStatus(""); setManualCopy(false); setSheetOpen(true); };
   const copyLink = async () => {
     if (!activeLink) return;
-    try { await navigator.clipboard.writeText(shareText); setShareStatus("복사했어요. 친구와의 대화창에 붙여넣어주세요."); }
+    try { await navigator.clipboard.writeText(activeLink); setShareStatus("복사했어요. 친구와의 대화창에 붙여넣어주세요."); }
     catch { setManualCopy(true); setShareStatus("아래 내용을 선택해서 복사해주세요."); }
   };
   const sendLink = async () => {
@@ -772,18 +865,19 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
       try {
         let result = linkCache.current.get(linkKey);
         if (!result) {
-          result = await createLink({ record, purpose: sheetOpen ? "mission" : "result", missions: sheetOpen ? [...chosenMissions].sort() : [] });
+          result = await createLink({ record, purpose: sheetOpen ? "mission" : "result", missions: sheetOpen ? [...chosenMissions].sort() : [], message: friendMessage });
           linkCache.current.set(linkKey, result);
         }
         setPreparedLink({ key: linkKey, ...result });
-        setShareStatus("링크가 준비됐어요. 보내기 버튼을 눌러주세요.");
+        try { await navigator.clipboard.writeText(result.url); setShareStatus("링크를 만들고 복사했어요. 친구에게 붙여넣어 보내세요."); }
+        catch { setManualCopy(true); setShareStatus("링크가 준비됐어요. 아래 링크를 복사하거나 보내기 버튼을 눌러주세요."); }
       } catch (e) { setShareStatus(e.message || "링크를 만들지 못했어요. 연결을 확인하고 다시 시도해주세요."); }
       finally { shareLock.current = false; setShareBusy(false); }
       return;
     }
     if (!navigator.share) { await copyLink(); return; }
     shareLock.current = true; setShareBusy(true);
-    try { await navigator.share({ title: "술깝 · 당신의 술값 영수증", text: shareText }); setShareStatus("공유를 마쳤어요."); }
+    try { await navigator.share({ title: "술깝 · 당신의 술값 영수증", text: shareText.replace(activeLink, "").trim(), url: activeLink }); setShareStatus("공유를 마쳤어요."); }
     catch (e) { if (e.name !== "AbortError") { setManualCopy(true); setShareStatus("공유창을 열지 못했어요. 링크를 복사해 보내주세요."); } }
     finally { shareLock.current = false; setShareBusy(false); }
   };
@@ -799,7 +893,7 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
   };
   const shareControls = <>
     {shareStatus && <p className="status" role="status">{shareStatus}</p>}
-    {activeLink && <><button className="link-button" onClick={copyLink} disabled={shareBusy}>링크 복사</button><a className="link-button" href={activeLink} target="_blank" rel="noreferrer">받는 화면 미리보기 ↗</a></>}
+    {activeLink && <div className="share-link-box"><label className="message-label" htmlFor="ready-share-link">친구에게 보낼 링크</label><input id="ready-share-link" readOnly value={activeLink} onFocus={e=>e.target.select()}/><div className="share-link-actions"><button className="link-button" onClick={copyLink} disabled={shareBusy}>링크 복사</button><a className="link-button" href={activeLink} target="_blank" rel="noreferrer">받는 화면 미리보기 ↗</a></div></div>}
     {manualCopy && <textarea aria-label="복사할 공유 링크" readOnly value={shareText} onFocus={e => e.target.select()} />}
     {activeLink && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname) && <p className="footnote">지금 링크는 이 컴퓨터에서만 열려요. 친구에게 보내려면 사이트를 배포한 뒤 새 링크를 만들어주세요.</p>}
   </>;
@@ -808,12 +902,16 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
 
 
   return <div className="sk" style={{ "--grain": grain ? `url("${grain}")` : "none" }}>
-    <style>{CSS}</style>
+    <style>{CSS + `.sk .friend-note{border-left:3px solid var(--green);padding:14px 18px;margin:18px 0 24px;background:#f5f6f4}.sk .friend-note small{font-size:12px;color:var(--muted)}.sk .friend-note p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:18px;line-height:1.6;margin:8px 0 0}.sk .field textarea{width:100%;font:inherit;padding:12px;border:1px solid var(--line);background:transparent;resize:vertical}.sk .care-section form{margin-top:20px}`}</style>
     <header className="sk-header">
-      {page > 0 && !shared && page !== 5 ? <button className="sk-back" disabled={analyzing} onClick={() => move(page === 4 ? 3 : page - 1)}>← 이전</button> : <span aria-hidden="true" />}
+      {page === 6 ? <button className="sk-back" onClick={()=>move(myReturnPage.current)}>← 돌아가기</button> : page > 0 && !shared && page !== 5 ? <button className="sk-back" disabled={analyzing} onClick={() => move(page === 4 ? 3 : page - 1)}>← 이전</button> : <span aria-hidden="true" />}
       <div className="sk-logo mono">술깝</div>
+      <button type="button" className={`sk-auth${authUser ? " sk-auth-email" : ""}`} onClick={() => authUser ? openMyPage() : openAuth()} aria-label={authUser ? "마이페이지" : "로그인"} aria-current={page === 6 ? "page" : undefined}>
+        {authUser ? "마이페이지" : "로그인"}
+      </button>
     </header>
 
+    {page === 6 && (authUser ? <MyPage key={authUser.id} user={authUser} onOpen={openSavedReceipt} onStart={startOwn} onLogout={logoutAuth} busy={authBusy} error={authError} formatTime={formatTime}/> : <main className="sk-stage"><h1>내 기록을 보려면</h1><p>로그인하고 영수증과 약속을 이어서 만나보세요.</p><button className="primary" onClick={()=>openAuth()}>로그인</button></main>)}
     {page === 0 && <main className="sk-stage home" key="home">
       <p className="eyebrow">당신의 술값 영수증</p>
       <h1 ref={headingRef} tabIndex={-1}>그날 마신 양,<br />상위 <em>몇 %</em>일까요?</h1>
@@ -891,7 +989,9 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     </main>}
 
     {page === 4 && record && <main className="sk-stage result" key={`result-${record.id}`}>
-      <p className="result-caption" ref={headingRef} tabIndex={-1} aria-live="polite">{printing ? "영수증을 출력하고 있어요." : "당신에게 청구된 술값입니다."}</p>
+      <p className="result-caption" ref={headingRef} tabIndex={-1} aria-live="polite">{printing ? "영수증을 출력하고 있어요." : shared ? "친구가 보낸 그날의 영수증" : "당신에게 청구된 술값입니다."}</p>
+      {shared?.message && <aside className="friend-note"><small>친구가 남긴 한마디</small><p>{shared.message}</p></aside>}
+      {shared && <section className="shared-intro"><span className="eyebrow">한 장으로 남긴 그날의 술자리</span><h1>술값은 냈는데,<br /><em>술깝</em>은 얼마였을까?</h1><p>친구의 영수증이 도착했어요.<br />나는 어떤 영수증을 받게 될까요?</p><button className="primary" onClick={startOwn}>나도 영수증 받아보기 ↗</button></section>}
       <div className="printer"><div className="slot" aria-hidden="true" /><div className="paper-window">
         <article ref={receiptRef} className="paper receipt" aria-label="술깝 결과 영수증" onAnimationEnd={(e) => { if (e.animationName === "feed-paper") setPrinting(false); }}>
           <div className="receipt-head"><div className="brand">술깝</div><p className="occasion-name">{record.occasion || "우리의 술자리"}</p></div>
@@ -901,22 +1001,25 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
           <hr className="rule" /><div className="alcohol"><div className="row"><span>전체 순수알코올</span><span>{record.total.toFixed(1)}g</span></div><div className="row"><span>인당 추정 순수알코올</span><span>{record.personal.toFixed(1)}g</span></div></div>
           <p className="receipt-note">전체 음주량을 {record.people}명으로 나눈 추정값<br />품목 수량은 전체 / 청구 시간은 인당</p>
           <hr className="rule" /><div className="total-label">총 청구액</div><div className="total">수명 −{formatTime(record.minutes)}</div>
-          <div className="row"><span>결제 수단</span><span>나의 시간</span></div><Barcode /><div className="serial">SULKKAP / THANK YOU</div>
+          <div className="row"><span>결제 수단</span><span>나의 시간</span></div><Barcode /><ReceiptQR url={shared?shareUrl(shared.id):activeLink}/><div className="serial">SULKKAP / THANK YOU</div>
         </article>
       </div></div>
       {shared ? <>
-        {shared.purpose === "mission" && <section className="care-section"><h2>수명 회복하기</h2><p>친구와 함께 미션을 마쳤다면 체크해주세요.<br />총 복원 시간은 청구 수명까지만 적용돼요.</p>
+        {shared.social && <Room id={shared.id} minutes={record.minutes} formatTime={formatTime}/>}{!shared.social && shared.purpose === "mission" && <section className="care-section"><h2>수명 회복하기</h2><p>친구와 함께 미션을 마쳤다면 체크해주세요.<br />총 복원 시간은 청구 수명까지만 적용돼요.</p>
           <MissionChoices available={shared.missions} checked={checked} onToggle={toggleMission} />
           <div className="recovered" aria-live="polite"><p>돌려받은 수명</p><strong className="recovery-total">+{formatTime(recoveredMinutes(record, checked))}</strong><p>남은 청구 수명 {formatTime(record.minutes - recoveredMinutes(record, checked))}</p></div>
           <p className="footnote">체크는 이 브라우저에만 저장돼요. 친구에게 전송되지 않으며, 체크를 해제하면 복원 시간도 되돌아가요.</p>
         </section>}
-        <div className="result-actions"><button className="primary" onClick={startOwn}>내 술깝도 확인하기</button><button className="secondary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "영수증 저장"}</button></div>
+        <section className="shared-nudge"><h2>이번엔 내 차례.</h2><p>그날의 술과 인원만 적으면<br />나만의 영수증이 완성돼요.</p><button className="primary" onClick={startOwn}>내 술깝 확인하기 →</button><small>가입 없이 시작 · 친구에게 공유까지</small></section><button className="secondary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "친구의 영수증 이미지 저장"}</button>
       </> : <>
+        <label className="field">친구에게 한마디 <small>(선택)</small><textarea maxLength={160} rows={2} value={friendMessage} onChange={e=>setFriendMessage(e.target.value)} placeholder="다음엔 술 말고 맛있는 거 먹자."/></label>
+        <section className="share-spotlight"><small>MY RECEIPT, YOUR TURN</small><h2>내 술깝은 이 정도. 너는?</h2><p>한 장의 영수증으로 그날의 이야기를 꺼내봐요.</p><button className="primary" onClick={sendLink} disabled={printing || shareBusy}><ShareIcon />{shareBusy ? "링크 만드는 중…" : activeLink ? "친구에게 보내기" : "내 술깝 공유하기"}</button>{!sheetOpen && shareControls}</section>
         <section className="recovery-invite"><h2>그날 함께한 친구와</h2><p>같이 할 미션을 고르고, 청구된 수명을 돌려받아요.</p>
           <button className="primary recovery-main" onClick={openShare} ref={openerRef} disabled={printing || shareBusy}><ShareIcon />친구와 수명 복구하기<span aria-hidden="true">→</span></button>
         </section>
-        <div className="result-actions secondary-result-actions"><button className="secondary" onClick={sendLink} disabled={printing || shareBusy}><ShareIcon />{shareBusy ? "준비 중…" : activeLink ? "내 술깝 보내기" : "내 술깝 공유하기"}</button><button className="link-button save-button" onClick={save} disabled={saving}>{saving ? "저장 중…" : "영수증 저장"}</button></div>
-        {!sheetOpen && shareControls}
+        <button className="link-button save-button" onClick={save} disabled={saving}>{saving ? "저장 중…" : "영수증 이미지 저장"}</button>
+        {activeLink&&<><a className="secondary" style={{display:'block',textAlign:'center'}} href={activeLink}>공유 화면에서 친구와 약속 확인하기</a><button className="secondary" disabled={saving} onClick={async()=>{setSaving(true);try{const b=await socialImage(imageBlob||await receiptImage(record),activeLink,record,true);const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='술깝-스토리.png';a.click();setTimeout(()=>URL.revokeObjectURL(u),10000);setStatus('스토리 이미지를 저장했어요. SNS에서 링크 스티커에 공유 링크를 붙여주세요.');}catch{setStatus('스토리 이미지를 저장하지 못했어요.')}finally{setSaving(false)}}}>인스타 스토리 이미지 저장</button><button className="link-button" onClick={copyLink}>카카오톡 등에 보낼 링크 복사</button></>}
+        <p className="footnote" role="status">{cloudStatus}</p>
         <div className="edit-actions"><button className="link-button" onClick={() => move(3)}>입력 수정하기</button><button className="link-button" onClick={reset}>다시 계산하기</button></div>
       </>}
       {status && <p className="status" role="status">{status}</p>}
@@ -925,7 +1028,7 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
         <p>구간 경계를 0·25·45·65·95g으로 두고 구간 안에서는 균등하게 분포한다고 가정해 선형 보간합니다. 인당 95g 이상은 마지막 두 경계의 감소율을 연장하는 지수 모형을 사용합니다. 이 상단 모형은 논문에서 검증한 분포가 아닙니다.</p>
         <p>상위 비율은 정수로 반올림하되 0% 대신 최소 1%로 표시합니다. 모형값이 0.1% 이하가 되는 약 {Math.ceil(RANK_FLOOR_GRAMS)}g 이상에서는 0.1%로 고정합니다. 실제 상위 0.1%가 확인됐다는 뜻이 아니며, 정수 표시는 1% 단위 정확도를 보장하지 않습니다. 음주량 0g은 비교에서 제외합니다.</p>
         <p><a href={RANK_SOURCE} target="_blank" rel="noreferrer">통계 출처 · Lee &amp; Jang (2021), 표 1</a></p>
-        <p>청구 수명은 인당 순수알코올의 첫 30g에는 g당 1분, 다음 30g에는 g당 2분, 다음 40g에는 g당 3분, 100g을 초과한 양에는 g당 4분을 더하는 게임 규칙입니다. 총액을 분 단위로 반올림하고 품목별 알코올 비중으로 나눠 표시합니다. 품목별 청구 시간의 합계는 총 청구액과 같습니다. 연구에 기반한 수명 추정치가 아닙니다.</p><p>여행·콘서트·캠핑은 각각 10시간, 함께하는 외출·식사는 각각 1시간, 일상 속 교류는 각각 30분을 복원하는 게임 규칙입니다. 미션 선택 개수에는 제한이 없고, 완료한 미션의 보상을 합산하되 원래 청구 시간을 넘지 않습니다. 표시된 보상은 게임에서 정한 값이며 활동 시간이나 건강 효과를 뜻하지 않습니다. 복원은 실제 수행 여부를 검증하지 않습니다. 완료 체크는 받은 사람의 브라우저에 링크별로 저장됩니다.</p></details>
+        <p>청구 수명은 인당 순수알코올의 첫 30g에는 g당 1분, 다음 30g에는 g당 2분, 다음 40g에는 g당 3분, 100g을 초과한 양에는 g당 4분을 더하는 게임 규칙입니다. 총액을 분 단위로 반올림하고 품목별 알코올 비중으로 나눠 표시합니다. 품목별 청구 시간의 합계는 총 청구액과 같습니다. 연구에 기반한 수명 추정치가 아닙니다.</p><p>여행·콘서트·캠핑은 각각 10시간, 함께하는 외출·식사는 각각 1시간, 일상 속 교류는 각각 30분을 복원하는 게임 규칙입니다. 미션 선택 개수에는 제한이 없고, 완료한 미션의 보상을 합산하되 원래 청구 시간을 넘지 않습니다. 표시된 보상은 게임에서 정한 값이며 활동 시간이나 건강 효과를 뜻하지 않습니다. 복원은 실제 수행 여부를 검증하지 않습니다. 새 공유 링크의 완료 상태는 서버에 저장되어 참여자에게 함께 표시됩니다. 예전 링크는 브라우저에만 저장됩니다.</p></details>
       <p className="footnote">{NOTICE}</p>{fontWarning}
     </main>}
 
@@ -950,10 +1053,42 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     </section></div>}
 
     {draftWarning && !shared && <p className="footnote" role="status" style={{ padding: "0 24px 24px" }}>{draftWarning}</p>}
+    {authOpen && <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget && !authBusy) closeAuth(); }}>
+      <section className="sheet auth-sheet" ref={authRef} role="dialog" aria-modal="true" aria-labelledby="auth-title">
+        <div className="sheet-handle" />
+        <div className="sheet-head">
+          <h2 id="auth-title">{authUser && authMode === "account" ? "내 계정" : authMode === "signup" ? "회원가입" : "로그인"}</h2>
+          <button type="button" aria-label="닫기" disabled={authBusy} onClick={closeAuth}>×</button>
+        </div>
+        <>
+          <button className="secondary" type="button" disabled={authBusy} onClick={async()=>{setAuthBusy(true);setAuthError('');try{await googleLogin()}catch(e){setAuthError(e.message);setAuthBusy(false)}}}>Google로 계속하기</button>
+          <div className="auth-tabs" role="tablist" aria-label="로그인 방식">
+            <button type="button" role="tab" aria-pressed={authMode === "login"} disabled={authBusy} onClick={() => { setAuthMode("login"); setAuthError(""); setAuthStatus(""); }}>로그인</button>
+            <button type="button" role="tab" aria-pressed={authMode === "signup"} disabled={authBusy} onClick={() => { setAuthMode("signup"); setAuthError(""); setAuthStatus(""); }}>회원가입</button>
+          </div>
+          <form onSubmit={submitAuth} noValidate>
+            <label className="field">이메일<input type="email" autoComplete="email" inputMode="email" maxLength={120} placeholder="you@example.com" value={authEmail} disabled={authBusy} onChange={e => { setAuthEmail(e.target.value); setAuthError(""); }} /></label>
+            <label className="field password-field">비밀번호
+              <input type={authShowPassword ? "text" : "password"} autoComplete={authMode === "signup" ? "new-password" : "current-password"} minLength={6} maxLength={72} placeholder="6자 이상" value={authPassword} disabled={authBusy} onChange={e => { setAuthPassword(e.target.value); setAuthError(""); }} />
+              <button type="button" className="password-toggle" aria-label={authShowPassword ? "비밀번호 숨기기" : "비밀번호 보이기"} aria-pressed={authShowPassword} disabled={authBusy} onClick={() => setAuthShowPassword(v => !v)}><EyeIcon open={authShowPassword} /></button>
+            </label>
+            {authError && <p className="error" role="alert">{authError}</p>}
+            {authStatus && <p className="status" role="status">{authStatus}</p>}
+            <button className="primary" type="submit" disabled={authBusy}>{authBusy ? "처리 중…" : authMode === "signup" ? "가입하기" : "로그인"}</button>
+          </form>
+          <p className="auth-switch">
+            <button type="button" className="link-button" disabled={authBusy} onClick={() => { setAuthMode(authMode === "signup" ? "login" : "signup"); setAuthError(""); setAuthStatus(""); }}>
+              {authMode === "signup" ? "이미 계정이 있나요? 로그인" : "계정이 없나요? 회원가입"}
+            </button>
+          </p>
+          <p className="footnote">로그인하면 영수증과 약속을 마이페이지에서 모아볼 수 있어요.</p>
+        </>
+      </section>
+    </div>}
     {sheetOpen && record && <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget && !shareBusy) setSheetOpen(false); }}>
       <section className="sheet" ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby="share-title"><div className="sheet-handle" />
         <div className="sheet-head"><h2 id="share-title">함께할 미션 고르기</h2><button aria-label="닫기" disabled={shareBusy} onClick={() => { setSheetOpen(false); setShareStatus(""); setManualCopy(false); }}>×</button></div>
-        <p className="connection-intro">친구와 하고 싶은 미션을 자유롭게 골라주세요.<br />큰 약속부터 오늘 할 수 있는 일까지 있어요.</p>
+        <label className="field">영수증 위에 전할 한마디<textarea maxLength={160} rows={2} value={friendMessage} disabled={shareBusy} onChange={e=>setFriendMessage(e.target.value)} placeholder="다음엔 맛있는 거 먹자."/></label><p className="connection-intro">친구와 하고 싶은 미션을 자유롭게 골라주세요.<br />큰 약속부터 오늘 할 수 있는 일까지 있어요.</p>
         <p className="mission-counter" role="status">{chosenMissions.length}개 선택 · 모두 완료하면 최대 {formatTime(recoveredMinutes(record, chosenMissions))}<small>복원 합계는 청구 수명 {formatTime(record.minutes)}까지만 적용돼요.</small></p>
         <MissionChoices checked={chosenMissions} disabled={shareBusy} onToggle={id => { setChosenMissions(old => old.includes(id) ? old.filter(value => value !== id) : [...old, id]); setShareStatus(""); setManualCopy(false); }} />
         <button className="primary mission-submit" disabled={shareBusy || !chosenMissions.length} onClick={sendLink}><ShareIcon />{shareBusy ? "준비 중…" : activeLink ? "친구에게 미션 보내기" : "미션 링크 만들기"}</button>

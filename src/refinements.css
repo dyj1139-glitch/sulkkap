@@ -1,0 +1,35 @@
+/* Brand: the same ink and paper colors as the primary button and page. */
+.sk .receipt-logo{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:74px;height:58px;padding:5px 5px 10px;background:var(--green);color:#ecedec;clip-path:polygon(0 0,100% 0,100% 100%,90% 91%,80% 100%,70% 91%,60% 100%,50% 91%,40% 100%,30% 91%,20% 100%,10% 91%,0 100%);position:relative;border-radius:3px 3px 0 0;vertical-align:middle}
+.sk .receipt-logo>span,.sk .paper .receipt-logo>span{font-family:'NeoDunggeunmo',monospace;font-size:29px;line-height:1;font-weight:400;letter-spacing:0;color:#ecedec}
+.sk .receipt-logo:before{content:'';position:absolute;top:7px;left:10px;right:10px;border-top:1px dashed #ecedec55}
+.sk .header-logo{width:65px;height:50px}.sk .header-logo>span{font-size:26px}.sk .receipt-head .receipt-logo{width:82px;height:65px;margin:0 auto 16px}.sk .receipt-head .receipt-logo>span{font-size:32px}
+.sk .share-spotlight,.sk .share-spotlight.recovery-invite{border-radius:16px;padding:25px 23px;margin:20px 0 0;border:1px solid #d5d3cc;background:#e4e0d7;box-shadow:none}
+.sk .share-spotlight.recovery-invite{background:#dce5e3;border-color:#cbd7d3}
+.sk .share-spotlight>small{font-size:10px;letter-spacing:1.35px;color:#62685e}
+.sk .share-spotlight h2,.sk .share-spotlight.recovery-invite h2{font-size:23px;line-height:1.4;letter-spacing:-.9px;color:#233d33;margin:16px 0 9px;word-break:keep-all}
+.sk .share-spotlight p,.sk .share-spotlight.recovery-invite p{font-size:13px;line-height:1.8;color:#63695f;margin:0 0 20px}
+.sk .share-spotlight .primary{display:flex;align-items:center;justify-content:flex-start;gap:3px;min-height:55px;font-size:15px;border-radius:8px;box-shadow:none}.sk .share-spotlight .primary>span{margin-left:auto;font-size:20px}
+.sk .share-spotlight.recovery-invite .primary{background:#fcfcf7;color:var(--green);border:1px solid #c1cfca}
+.sk .save-button{margin-top:14px}
+.sk .composer-exports{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}.sk .composer-exports button{min-height:45px;border:1px solid #d4dccd;background:#fff;border-radius:8px;font:inherit;font-size:11px;color:#4b6545;padding:8px}
+.sk .auth-backdrop{align-items:center;padding:22px;background:#12241dcc;backdrop-filter:blur(5px)}
+.sk .sheet.auth-sheet{position:relative;max-width:400px;border-radius:22px;padding:30px 28px 23px;background:#f7f7f2;max-height:calc(100dvh - 32px);box-shadow:0 24px 90px #11251b40;animation:rise .25s ease both}
+.sk .auth-close{position:absolute;right:12px;top:12px;width:40px;height:40px;border:0;border-radius:50%;font-size:25px;font-weight:300;color:#536056;background:transparent}
+.sk .auth-welcome{text-align:center;margin-bottom:26px}.sk .auth-welcome .receipt-logo{width:75px;height:59px;margin:3px auto 21px}.sk .auth-welcome .eyebrow{font-size:9px;letter-spacing:1.5px;color:#718174;margin-bottom:13px}
+.sk .auth-welcome h2{font-size:27px;line-height:1.4;letter-spacing:-1px;color:#244b3d;margin:0 0 12px}.sk .auth-welcome>p:last-child{font-size:12px;line-height:1.8;color:#798176;margin:0}
+.sk .sheet.auth-sheet .field{margin:0 0 16px;font-size:12px;color:#536052}.sk .sheet.auth-sheet .field input{height:49px;min-height:49px;margin-top:8px;border:1px solid #d8dfd5;border-radius:9px;background:#fff;padding:12px 14px;font-size:14px;color:#263d32;box-shadow:none}
+.sk .sheet.auth-sheet .password-field input{padding-right:48px}.sk .sheet.auth-sheet .password-toggle{bottom:3px;right:4px;min-height:44px}
+.sk .sheet.auth-sheet .primary{min-height:51px;margin:4px 0 0;font-size:15px;border-radius:9px}
+.sk .auth-divider{display:flex;align-items:center;gap:12px;margin:20px 0;font-size:10px;color:#96a18f}.sk .auth-divider:before,.sk .auth-divider:after{content:'';height:1px;background:#dce1d6;flex:1}
+.sk .sheet.auth-sheet .google-auth{display:flex;align-items:center;justify-content:center;gap:12px;background:#fff;border:1px solid #d9ded3;min-height:49px;font-size:13px;font-weight:500;border-radius:9px}
+.sk .sheet.auth-sheet .auth-switch{margin:18px 0 0}.sk .sheet.auth-sheet .auth-switch button{font-size:12px;min-height:40px;color:#3e6249}.sk .auth-note{font-size:10px;text-align:center;color:#8a9383;margin:2px 0 0;line-height:1.7}
+.sk .sheet.share-composer{padding:18px 24px calc(24px + env(safe-area-inset-bottom));background:#f6f6f1;border-radius:22px 22px 0 0}
+.sk .share-composer .sheet-head h2{font-size:21px}.sk .composer-receipt{display:flex;align-items:center;gap:15px;background:#e9ece4;border:1px solid #dce1d5;padding:16px;border-radius:11px;margin:8px 0 22px}
+.sk .composer-receipt .receipt-logo{width:47px;height:53px}.sk .composer-receipt .receipt-logo>span{font-size:20px}.sk .composer-receipt>div{min-width:0}.sk .composer-receipt small{display:block;font-size:10px;color:#7c8673;margin-bottom:6px}.sk .composer-receipt strong{display:block;font-size:14px;overflow-wrap:anywhere;color:#354934}.sk .composer-receipt div>span{display:block;font-size:10px;color:#798670;margin-top:6px}
+.sk .share-composer .message-card{font-size:13px;color:#344832;margin-bottom:24px}.sk .share-composer .message-card>small{font-size:10px;color:#8e9588;margin-left:5px}.sk .share-composer .message-card textarea{display:block;background:#fff;border:1px solid #d6ddce;border-radius:9px;min-height:104px;font-size:14px;padding:13px;margin-top:10px;line-height:1.7;box-shadow:none}
+.sk .message-foot{display:flex;justify-content:space-between;gap:12px;font-size:10px;line-height:1.6;color:#8a947d;margin-top:8px}.sk .share-composer .mission-submit{position:sticky;bottom:0;background:var(--green);box-shadow:0 -12px 0 #f6f6f1;margin-top:16px}.sk .share-composer .mission-submit:disabled{background:#d5d8d0}
+.sk .receipt-qr{display:flex;flex-direction:column;align-items:center;padding:22px 0 3px;margin-top:19px;border-top:1px dashed #b8bdb4;text-align:center}
+.sk .receipt-qr img{display:block;max-width:100%;height:auto;background:#fff;image-rendering:pixelated}.sk .receipt-qr p{font-size:11px;line-height:1.7;margin:10px 0 0;color:#485941}.sk .receipt-qr small{font-size:9px;color:#7b8272;line-height:1.7;margin-top:4px;word-break:keep-all}
+.sk .receipt-qr .qr-retry{font-family:inherit;border:1px solid #bac8b1;border-radius:6px;background:#f8faf5;color:#315035;font-size:11px;min-height:38px;margin:10px 0;padding:8px 14px}.sk .receipt-qr .qr-error{font-size:10px;color:#8a5f4c;max-width:260px}
+@media(max-width:360px){.sk .auth-backdrop{padding:12px}.sk .sheet.auth-sheet{padding:25px 22px 18px}.sk .auth-welcome h2{font-size:25px}.sk .share-spotlight,.sk .share-spotlight.recovery-invite{padding:21px 19px}.sk .share-spotlight h2,.sk .share-spotlight.recovery-invite h2{font-size:21px}}
+@media(max-height:740px){.sk .auth-welcome{margin-bottom:18px}.sk .auth-welcome .receipt-logo{margin-bottom:13px}.sk .auth-welcome .eyebrow{display:none}.sk .auth-welcome h2{font-size:23px}.sk .auth-welcome>p:last-child{display:none}.sk .auth-divider{margin:15px 0}}

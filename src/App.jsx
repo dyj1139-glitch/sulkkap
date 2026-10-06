@@ -3,6 +3,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { db, call, ensureGuest, passwordAuth, restore, logout, googleLogin, finishLogin, queueReceipt, syncReceipts, shareUrl } from './social.js';
 import { Room, ReceiptQR, socialImage } from './Social.jsx';
 import MyPage from './MyPage.jsx';
+import Brand from './Brand.jsx';
+import refinementCSS from './refinements.css?inline';
 
 // 함께 제공한 src 폴더 전체를 교체하세요. JSX 컴포넌트는 .jsx 확장자를 유지합니다.
 const LOGO_FONT_CSS = "https://cdn.jsdelivr.net/gh/neodgm/neodgm-webfont@1.601/neodgm/style.css";
@@ -433,12 +435,12 @@ function Barcode() {
   return <div className="barcode" aria-hidden="true">{Array.from({ length: 48 }, (_, i) => <i key={i} style={{ width: [1, 3, 1, 2, 4, 1, 2][i % 7] }} />)}</div>;
 }
 function MiniReceipt() {
-  return <div className="preview-wrap" aria-label="결과 예시: 상위 비율과 청구 수명이 표시된 영수증">
-    <div className="paper mini"><div className="brand">술깝</div><div className="rank">상위 ?%</div>
-      <hr className="rule" /><div className="row"><span>소주</span><span>2병</span></div><div className="row"><span>맥주</span><span>3캔</span></div>
-      <hr className="rule" /><div>총 청구액</div><div className="bill">수명 −???시간</div>
-    </div>
-    <span className="example">결과 예시</span>
+  return <div className="preview-wrap" aria-label="결과 예시: 상위 비율과 청구 수명이 표시된 영수증"> 
+    <div className="paper mini"><div className="brand receipt-wordmark">술깝</div><div className="rank">상위 ?%</div> 
+      <hr className="rule" /><div className="row"><span>소주</span><span>2병</span></div><div className="row"><span>맥주</span><span>3캔</span></div> 
+      <hr className="rule" /><div>총 청구액</div><div className="bill">수명 −???시간</div> 
+    </div> 
+    <span className="example">결과 예시</span> 
   </div>;
 }
 function NumberField({ label, value, onChange, min = 0, max, hint }) {
@@ -470,7 +472,7 @@ async function receiptImage(record) {
     for (const ch of String(s)) { if (ctx.measureText(row + ch).width > maxWidth && row) { rows.push(row); row = ch; } else row += ch; }
     if (row) rows.push(row); return rows;
   };
-  text("술깝", 50, "center"); y += 55;
+  text("술깝", 44, "center"); y += 74;
   for (const row of wrap(record.occasion || "우리의 술자리", 545, 28)) { text(row, 28, "center"); y += 38; }
   y += 10;
   text(record.date, 22); text(`${record.people}명`, 22, "right"); y += 20; line();
@@ -500,7 +502,7 @@ async function receiptImage(record) {
   text(bill, billSize, "right"); y += 46;
   text("결제 수단", 23); text("나의 시간", 23, "right"); y += 26; line();
   for (const row of wrap(`${RANK_NOTE}. 최대 주량의 순위가 아닙니다. 95g 이상은 외삽, 0.1%는 모형의 표시 하한입니다. 출처: Lee & Jang (2021), doi:10.3390/ijerph18126433. ${NOTICE}`, 545, 20)) { text(row, 20, "left", undefined, "#70756f"); y += 28; }
-  y += 16; commands.push({ barcode: true, y }); y += 65;
+  y += 30;
   text("SULKKAP / THANK YOU", 20, "center"); y += 44;
   canvas.height = y + 10; ctx = canvas.getContext("2d");
   ctx.fillStyle = "#fefefc"; ctx.fillRect(0, 0, 640, y);
@@ -513,7 +515,7 @@ async function receiptImage(record) {
   for (const c of commands) {
     if (c.line) { ctx.strokeStyle = "#969b96"; ctx.lineWidth = 1; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.moveTo(44, c.y); ctx.lineTo(596, c.y); ctx.stroke(); ctx.setLineDash([]); }
     else if (c.barcode) { let x = 174; ctx.fillStyle = "#303529"; for (let k = 0; k < 48; k++) { const w = [2, 4, 2, 3, 5, 2][k % 6]; ctx.fillRect(x, c.y, w, 39); x += w + 3; } }
-    else { ctx.font = `${c.size}px ${c.s === "술깝" ? '"NeoDunggeunmo", monospace' : font}`; ctx.fillStyle = c.color; ctx.textAlign = c.align; ctx.fillText(c.s, c.x, c.y); }
+    else { if(c.s === '술깝') { ctx.fillStyle='#244b3d';ctx.beginPath();ctx.moveTo(260,c.y-39);ctx.lineTo(380,c.y-39);ctx.lineTo(380,c.y+22);for(let x=380;x>260;x-=12){ctx.lineTo(x-6,c.y+16);ctx.lineTo(x-12,c.y+22)}ctx.closePath();ctx.fill();c.color='#ecedec'; } ctx.font = `${c.size}px ${c.s === "술깝" ? '"NeoDunggeunmo", monospace' : font}`; ctx.fillStyle = c.color; ctx.textAlign = c.align; ctx.fillText(c.s, c.x, c.y); }
   }
   return new Promise((resolve, reject) => canvas.toBlob((b) => b ? resolve(b) : reject(new Error("이미지 생성 실패")), "image/png"));
 }
@@ -553,6 +555,9 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [sharePurpose, setSharePurpose] = useState("result");
+  const [qrState, setQrState] = useState({id:null,url:"",error:"",busy:false});
+  const [qrRetry, setQrRetry] = useState(0);
   const [friendMessage,setFriendMessage]=useState("");
   const [cloudStatus,setCloudStatus]=useState("");
   const [chosenMissions, setChosenMissions] = useState(["meal"]);
@@ -566,6 +571,17 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
   const [retry, setRetry] = useState(0);
   const shareLock = useRef(false);
   const linkCache = useRef(new Map());
+  const linkTasks = useRef(new Map());
+  const linkKeyFor = options => JSON.stringify([options.record.id, options.message || '', options.purpose, [...options.missions].sort()]);
+  const prepareLink = options => {
+    const key = linkKeyFor(options);
+    if (linkCache.current.has(key)) return Promise.resolve(linkCache.current.get(key));
+    if (!linkTasks.current.has(key)) {
+      const task = Promise.resolve().then(()=>createLink(options)).then(result=>{linkCache.current.set(key,result); return result;}).finally(()=>linkTasks.current.delete(key));
+      linkTasks.current.set(key, task);
+    }
+    return linkTasks.current.get(key);
+  };
   const [imageBlob, setImageBlob] = useState(null);
   const receiptRef = useRef(null);
   const headingRef = useRef(null);
@@ -639,6 +655,16 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
   },[]);
   useEffect(()=>{if(!authUser)return;let alive=true;finishLogin().then(()=>{if(alive)setCloudStatus('로그인 전 기록까지 계정에 연결했어요.')}).catch(e=>{if(alive)setCloudStatus('기록 연결을 완료하지 못했어요. 마이페이지에서 새로고침해주세요. '+e.message)});return()=>alive=false},[authUser?.id]);
   useEffect(()=>{if(!record||shared)return;let alive=true;try{queueReceipt(record);setCloudStatus('기록을 보관하는 중…');syncReceipts().then(()=>{if(alive)setCloudStatus(authUser?'내 계정에 보관했어요.':'이 브라우저의 게스트 기록으로 보관했어요. 로그인하면 이어받을 수 있어요.')}).catch(()=>{if(alive)setCloudStatus('이 브라우저에 보관했어요. 서버 저장은 아직 완료되지 않았어요.')});}catch{setCloudStatus('기록을 보관하지 못했어요. 영수증 이미지를 저장해주세요.')}return()=>alive=false},[record?.id,shared?.id]);
+  useEffect(() => {
+    if(page !== 4 || !record || shared) return;
+    if(qrState.id === record.id && qrState.url) return;
+    let alive = true;
+    setQrState({id:record.id,url:'',error:'',busy:true});
+    prepareLink({record,purpose:'result',missions:[],message:''})
+      .then(link=>{if(alive)setQrState(previous=>previous.id===record.id&&previous.url?previous:{id:record.id,url:link.url,error:'',busy:false});})
+      .catch(e=>{if(alive)setQrState({id:record.id,url:'',error:e.message || 'QR 링크를 준비하지 못했어요.',busy:false});});
+    return()=>{alive=false};
+  }, [page,record?.id,shared?.id,qrRetry]);
   useLayoutEffect(() => {
     if (page !== 4 || !receiptRef.current) return;
     const paper = receiptRef.current;
@@ -835,12 +861,15 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     setSaving(true); setStatus("");
     try {
       let blob = imageBlob || await receiptImage(record);
-      let urlForQR=shared?shareUrl(shared.id):activeLink;
-      // Save the receipt without a QR until a working share link exists.
+      let urlForQR=shared?shareUrl(shared.id):(qrState.id===record.id?qrState.url:'');
+      if(!urlForQR){
+        try { const link=await prepareLink({record,purpose:'result',missions:[],message:''});urlForQR=link.url;setQrState({id:record.id,url:link.url,error:'',busy:false}); }
+        catch { /* Keep the image download available when the share server is offline. */ }
+      }
       if(urlForQR)blob=await socialImage(blob,urlForQR,record,false);
       const url = URL.createObjectURL(blob); const a = document.createElement("a");
       a.href = url; a.download = `술깝-${record.date}.png`; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10000); setStatus("영수증 이미지 저장을 요청했어요.");
+      setTimeout(() => URL.revokeObjectURL(url), 10000); setStatus(urlForQR ? "공유 QR이 포함된 영수증을 저장했어요." : "영수증을 저장했어요. 공유 연결이 안 되어 QR은 포함하지 못했어요.");
     } catch { setStatus("저장하지 못했어요. 다시 눌러주세요."); }
     finally { setSaving(false); }
   };
@@ -848,10 +877,10 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     if (!window.confirm("입력한 내용을 지우고 처음부터 시작할까요?")) return;
     setOccasion(""); setPeople(1); setItems([]); setNarrative(""); setInputStatus(""); setRecord(null); move(0);
   };
-  const linkKey = record ? JSON.stringify([record.id, friendMessage, sheetOpen ? "mission" : "result", sheetOpen ? [...chosenMissions].sort() : []]) : "";
+  const linkKey = record ? linkKeyFor({record,message:friendMessage,purpose:sharePurpose,missions:sharePurpose === "mission" ? chosenMissions : []}) : "";
   const activeLink = preparedLink?.key === linkKey ? preparedLink.url : linkCache.current.get(linkKey)?.url || "";
-  const shareText = record ? `${sheetOpen ? "우리, 다음엔 이 미션 같이 해볼까?" : "내 술깝은 이 정도. 너는?"}\n[${record.occasion || "우리의 술자리"}]\n음주량 기준 추정 ${rankLabel(record)}\n${RANK_NOTE}\n${friendMessage ? friendMessage + "\n" : ""}${activeLink}\n\n${NOTICE}` : "";
-  const openShare = () => { setShareStatus(""); setManualCopy(false); setSheetOpen(true); };
+  const shareText = record ? `${sharePurpose === "mission" ? "우리, 다음엔 이 미션 같이 해볼까?" : "내 술깝은 이 정도. 너는?"}\n[${record.occasion || "우리의 술자리"}]\n음주량 기준 추정 ${rankLabel(record)}\n${RANK_NOTE}\n${friendMessage ? friendMessage + "\n" : ""}${activeLink}\n\n${NOTICE}` : "";
+  const openShare = (purpose="mission") => { setSharePurpose(purpose); setShareStatus(""); setManualCopy(false); setSheetOpen(true); };
   const copyLink = async () => {
     if (!activeLink) return;
     try { await navigator.clipboard.writeText(activeLink); setShareStatus("복사했어요. 친구와의 대화창에 붙여넣어주세요."); }
@@ -863,18 +892,16 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     if (!activeLink) {
       shareLock.current = true; setShareBusy(true);
       try {
-        let result = linkCache.current.get(linkKey);
-        if (!result) {
-          result = await createLink({ record, purpose: sheetOpen ? "mission" : "result", missions: sheetOpen ? [...chosenMissions].sort() : [], message: friendMessage });
-          linkCache.current.set(linkKey, result);
-        }
+        const result = await prepareLink({ record, purpose: sharePurpose, missions: sharePurpose === "mission" ? [...chosenMissions].sort() : [], message: friendMessage });
         setPreparedLink({ key: linkKey, ...result });
+        setQrState({id:record.id,url:result.url,error:'',busy:false});
         try { await navigator.clipboard.writeText(result.url); setShareStatus("링크를 만들고 복사했어요. 친구에게 붙여넣어 보내세요."); }
         catch { setManualCopy(true); setShareStatus("링크가 준비됐어요. 아래 링크를 복사하거나 보내기 버튼을 눌러주세요."); }
       } catch (e) { setShareStatus(e.message || "링크를 만들지 못했어요. 연결을 확인하고 다시 시도해주세요."); }
       finally { shareLock.current = false; setShareBusy(false); }
       return;
     }
+    setQrState({id:record.id,url:activeLink,error:'',busy:false});
     if (!navigator.share) { await copyLink(); return; }
     shareLock.current = true; setShareBusy(true);
     try { await navigator.share({ title: "술깝 · 당신의 술값 영수증", text: shareText.replace(activeLink, "").trim(), url: activeLink }); setShareStatus("공유를 마쳤어요."); }
@@ -891,6 +918,7 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     const url = new URL(window.location.href); url.searchParams.delete("share");
     window.history.replaceState(null, "", url); setShared(null); setRecord(null); setLoadError(""); setSheetOpen(false); move(0);
   };
+  const saveStory = async()=>{setSaving(true);try{const b=await socialImage(imageBlob||await receiptImage(record),activeLink,record,true);const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='술깝-스토리.png';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),10000);setStatus('스토리 이미지를 저장했어요. SNS에서 링크 스티커에 공유 링크를 붙여주세요.');}catch{setStatus('스토리 이미지를 저장하지 못했어요.')}finally{setSaving(false)}};
   const shareControls = <>
     {shareStatus && <p className="status" role="status">{shareStatus}</p>}
     {activeLink && <div className="share-link-box"><label className="message-label" htmlFor="ready-share-link">친구에게 보낼 링크</label><input id="ready-share-link" readOnly value={activeLink} onFocus={e=>e.target.select()}/><div className="share-link-actions"><button className="link-button" onClick={copyLink} disabled={shareBusy}>링크 복사</button><a className="link-button" href={activeLink} target="_blank" rel="noreferrer">받는 화면 미리보기 ↗</a></div></div>}
@@ -902,10 +930,10 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
 
 
   return <div className="sk" style={{ "--grain": grain ? `url("${grain}")` : "none" }}>
-    <style>{CSS + `.sk .friend-note{border-left:3px solid var(--green);padding:14px 18px;margin:18px 0 24px;background:#f5f6f4}.sk .friend-note small{font-size:12px;color:var(--muted)}.sk .friend-note p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:18px;line-height:1.6;margin:8px 0 0}.sk .field textarea{width:100%;font:inherit;padding:12px;border:1px solid var(--line);background:transparent;resize:vertical}.sk .care-section form{margin-top:20px}`}</style>
+    <style>{CSS + refinementCSS + `.sk .friend-note{border-left:3px solid var(--green);padding:14px 18px;margin:18px 0 24px;background:#f5f6f4}.sk .friend-note small{font-size:12px;color:var(--muted)}.sk .friend-note p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:18px;line-height:1.6;margin:8px 0 0}.sk .field textarea{width:100%;font:inherit;padding:12px;border:1px solid var(--line);background:transparent;resize:vertical}.sk .care-section form{margin-top:20px}`}</style>
     <header className="sk-header">
       {page === 6 ? <button className="sk-back" onClick={()=>move(myReturnPage.current)}>← 돌아가기</button> : page > 0 && !shared && page !== 5 ? <button className="sk-back" disabled={analyzing} onClick={() => move(page === 4 ? 3 : page - 1)}>← 이전</button> : <span aria-hidden="true" />}
-      <div className="sk-logo mono">술깝</div>
+      <Brand className="header-logo"/>
       <button type="button" className={`sk-auth${authUser ? " sk-auth-email" : ""}`} onClick={() => authUser ? openMyPage() : openAuth()} aria-label={authUser ? "마이페이지" : "로그인"} aria-current={page === 6 ? "page" : undefined}>
         {authUser ? "마이페이지" : "로그인"}
       </button>
@@ -989,22 +1017,184 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     </main>}
 
     {page === 4 && record && <main className="sk-stage result" key={`result-${record.id}`}>
-      <p className="result-caption" ref={headingRef} tabIndex={-1} aria-live="polite">{printing ? "영수증을 출력하고 있어요." : shared ? "친구가 보낸 그날의 영수증" : "당신에게 청구된 술값입니다."}</p>
-      {shared?.message && <aside className="friend-note"><small>친구가 남긴 한마디</small><p>{shared.message}</p></aside>}
-      {shared && <section className="shared-intro"><span className="eyebrow">한 장으로 남긴 그날의 술자리</span><h1>술값은 냈는데,<br /><em>술깝</em>은 얼마였을까?</h1><p>친구의 영수증이 도착했어요.<br />나는 어떤 영수증을 받게 될까요?</p><button className="primary" onClick={startOwn}>나도 영수증 받아보기 ↗</button></section>}
-      <div className="printer"><div className="slot" aria-hidden="true" /><div className="paper-window">
-        <article ref={receiptRef} className="paper receipt" aria-label="술깝 결과 영수증" onAnimationEnd={(e) => { if (e.animationName === "feed-paper") setPrinting(false); }}>
-          <div className="receipt-head"><div className="brand">술깝</div><p className="occasion-name">{record.occasion || "우리의 술자리"}</p></div>
-          <div className="row"><span>{record.date}</span><span>{record.people}명</span></div>
-          <div className="rank-block"><p>음주량 기준 추정</p><div className="rank">{rankLabel(record)}</div><small>{rankCaption(record)}</small><small>평소 1회 음주량 기준</small></div>
-          <table><thead><tr><th>품목</th><th>수량</th><th>청구 시간</th></tr></thead><tbody>{record.items.map((i, index) => <tr key={i.id}><td>{i.name}<small>{i.container === "pet" ? "페트병 " : ""}{i.type === "highball" ? `${i.spirit} 원액 ` : ""}{i.volume}ml / {i.abv}%{Number(i.left) > 0 && <> / 남김 {i.left}{i.unit}</>}</small></td><td>{i.quantity}{i.unit}</td><td>{formatTime(allocateLifeMinutes(record)[index])}</td></tr>)}</tbody></table>
-          <hr className="rule" /><div className="alcohol"><div className="row"><span>전체 순수알코올</span><span>{record.total.toFixed(1)}g</span></div><div className="row"><span>인당 추정 순수알코올</span><span>{record.personal.toFixed(1)}g</span></div></div>
-          <p className="receipt-note">전체 음주량을 {record.people}명으로 나눈 추정값<br />품목 수량은 전체 / 청구 시간은 인당</p>
-          <hr className="rule" /><div className="total-label">총 청구액</div><div className="total">수명 −{formatTime(record.minutes)}</div>
-          <div className="row"><span>결제 수단</span><span>나의 시간</span></div><Barcode /><ReceiptQR url={shared?shareUrl(shared.id):activeLink}/><div className="serial">SULKKAP / THANK YOU</div>
-        </article>
-      </div></div>
-      {shared ? <>
+  <p
+    className="result-caption"
+    ref={headingRef}
+    tabIndex={-1}
+    aria-live="polite"
+  >
+    {printing
+      ? "영수증을 출력하고 있어요."
+      : shared
+      ? "친구가 보낸 그날의 영수증"
+      : "당신에게 청구된 술값입니다."}
+  </p>
+
+  {shared?.message && (
+    <aside className="friend-note">
+      <small>친구가 남긴 한마디</small>
+      <p>{shared.message}</p>
+    </aside>
+  )}
+
+  {shared && (
+    <section className="shared-intro">
+      <span className="eyebrow">한 장으로 남긴 그날의 술자리</span>
+
+      <h1>
+        술값은 냈는데,
+        <br />
+        <em>술깝</em>은 얼마였을까?
+      </h1>
+
+      <p>
+        친구의 영수증이 도착했어요.
+        <br />
+        나는 어떤 영수증을 받게 될까요?
+      </p>
+
+      <button className="primary" onClick={startOwn}>
+        나도 영수증 받아보기 ↗
+      </button>
+    </section>
+  )}
+
+  <div className="printer">
+    <div className="slot" aria-hidden="true" />
+
+    <div className="paper-window">
+      <article
+        ref={receiptRef}
+        className="paper receipt"
+        aria-label="술깝 결과 영수증"
+        onAnimationEnd={(e) => {
+          if (e.animationName === "feed-paper") {
+            setPrinting(false);
+          }
+        }}
+      >
+        <div className="receipt-head">
+          <div className="brand receipt-wordmark">술깝</div>
+
+          <p className="occasion-name">
+            {record.occasion || "우리의 술자리"}
+          </p>
+        </div>
+
+        <div className="row">
+          <span>{record.date}</span>
+          <span>{record.people}명</span>
+        </div>
+
+        <div className="rank-block">
+          <p>음주량 기준 추정</p>
+
+          <div className="rank">
+            {rankLabel(record)}
+          </div>
+
+          <small>{rankCaption(record)}</small>
+          <small>평소 1회 음주량 기준</small>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>품목</th>
+              <th>수량</th>
+              <th>청구 시간</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {record.items.map((i, index) => (
+              <tr key={i.id}>
+                <td>
+                  {i.name}
+
+                  <small>
+                    {i.container === "pet" ? "페트병 " : ""}
+                    {i.type === "highball" ? `${i.spirit} 원액 ` : ""}
+                    {i.volume}ml / {i.abv}%
+                    {Number(i.left) > 0 && (
+                      <> / 남김 {i.left}{i.unit}</>
+                    )}
+                  </small>
+                </td>
+
+                <td>
+                  {i.quantity}{i.unit}
+                </td>
+
+                <td>
+                  {formatTime(allocateLifeMinutes(record)[index])}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <hr className="rule" />
+
+        <div className="alcohol">
+          <div className="row">
+            <span>전체 순수알코올</span>
+            <span>{record.total.toFixed(1)}g</span>
+          </div>
+
+          <div className="row">
+            <span>인당 추정 순수알코올</span>
+            <span>{record.personal.toFixed(1)}g</span>
+          </div>
+        </div>
+
+        <p className="receipt-note">
+          전체 음주량을 {record.people}명으로 나눈 추정값
+          <br />
+          품목 수량은 전체 / 청구 시간은 인당
+        </p>
+
+        <hr className="rule" />
+
+        <div className="total-label">
+          총 청구액
+        </div>
+
+        <div className="total">
+          수명 −{formatTime(record.minutes)}
+        </div>
+
+        <div className="row">
+          <span>결제 수단</span>
+          <span>나의 시간</span>
+        </div>
+
+        <ReceiptQR
+          url={
+            shared
+              ? shareUrl(shared.id)
+              : qrState.id === record.id
+              ? qrState.url
+              : ""
+          }
+          busy={qrState.busy}
+          error={
+            qrState.id === record.id
+              ? qrState.error
+              : ""
+          }
+          retryToken={qrRetry}
+          onRetry={() => setQrRetry(n => n + 1)}
+        />
+
+        <div className="serial">
+          SULKKAP / THANK YOU
+        </div>
+      </article>
+    </div>
+  </div>
+
+  {shared ? <>
         {shared.social && <Room id={shared.id} minutes={record.minutes} formatTime={formatTime}/>}{!shared.social && shared.purpose === "mission" && <section className="care-section"><h2>수명 회복하기</h2><p>친구와 함께 미션을 마쳤다면 체크해주세요.<br />총 복원 시간은 청구 수명까지만 적용돼요.</p>
           <MissionChoices available={shared.missions} checked={checked} onToggle={toggleMission} />
           <div className="recovered" aria-live="polite"><p>돌려받은 수명</p><strong className="recovery-total">+{formatTime(recoveredMinutes(record, checked))}</strong><p>남은 청구 수명 {formatTime(record.minutes - recoveredMinutes(record, checked))}</p></div>
@@ -1012,13 +1202,12 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
         </section>}
         <section className="shared-nudge"><h2>이번엔 내 차례.</h2><p>그날의 술과 인원만 적으면<br />나만의 영수증이 완성돼요.</p><button className="primary" onClick={startOwn}>내 술깝 확인하기 →</button><small>가입 없이 시작 · 친구에게 공유까지</small></section><button className="secondary" onClick={save} disabled={saving}>{saving ? "저장 중…" : "친구의 영수증 이미지 저장"}</button>
       </> : <>
-        <label className="field">친구에게 한마디 <small>(선택)</small><textarea maxLength={160} rows={2} value={friendMessage} onChange={e=>setFriendMessage(e.target.value)} placeholder="다음엔 술 말고 맛있는 거 먹자."/></label>
-        <section className="share-spotlight"><small>MY RECEIPT, YOUR TURN</small><h2>내 술깝은 이 정도. 너는?</h2><p>한 장의 영수증으로 그날의 이야기를 꺼내봐요.</p><button className="primary" onClick={sendLink} disabled={printing || shareBusy}><ShareIcon />{shareBusy ? "링크 만드는 중…" : activeLink ? "친구에게 보내기" : "내 술깝 공유하기"}</button>{!sheetOpen && shareControls}</section>
-        <section className="recovery-invite"><h2>그날 함께한 친구와</h2><p>같이 할 미션을 고르고, 청구된 수명을 돌려받아요.</p>
-          <button className="primary recovery-main" onClick={openShare} ref={openerRef} disabled={printing || shareBusy}><ShareIcon />친구와 수명 복구하기<span aria-hidden="true">→</span></button>
+        <section className="share-spotlight"><small>01 / SHARE MY RECEIPT</small><h2>내 술깝은 이 정도. 너는?</h2><p>한 장의 영수증으로<br/>그날의 이야기를 꺼내봐요.</p><button className="primary" onClick={()=>openShare("result")} disabled={printing || shareBusy}><ShareIcon />내 술깝 공유하기<span aria-hidden="true">↗</span></button></section>
+        <section className="share-spotlight recovery-invite"><small>02 / MAKE OUR NEXT PLAN</small><h2>그날 함께한 친구와</h2><p>다음엔 술 대신, 우리 같이.<br/>미션을 고르고 청구된 시간을 돌려받아요.</p>
+          <button className="primary recovery-main" onClick={()=>openShare("mission")} ref={openerRef} disabled={printing || shareBusy}><ShareIcon />친구와 수명 복구하기<span aria-hidden="true">→</span></button>
         </section>
         <button className="link-button save-button" onClick={save} disabled={saving}>{saving ? "저장 중…" : "영수증 이미지 저장"}</button>
-        {activeLink&&<><a className="secondary" style={{display:'block',textAlign:'center'}} href={activeLink}>공유 화면에서 친구와 약속 확인하기</a><button className="secondary" disabled={saving} onClick={async()=>{setSaving(true);try{const b=await socialImage(imageBlob||await receiptImage(record),activeLink,record,true);const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='술깝-스토리.png';a.click();setTimeout(()=>URL.revokeObjectURL(u),10000);setStatus('스토리 이미지를 저장했어요. SNS에서 링크 스티커에 공유 링크를 붙여주세요.');}catch{setStatus('스토리 이미지를 저장하지 못했어요.')}finally{setSaving(false)}}}>인스타 스토리 이미지 저장</button><button className="link-button" onClick={copyLink}>카카오톡 등에 보낼 링크 복사</button></>}
+
         <p className="footnote" role="status">{cloudStatus}</p>
         <div className="edit-actions"><button className="link-button" onClick={() => move(3)}>입력 수정하기</button><button className="link-button" onClick={reset}>다시 계산하기</button></div>
       </>}
@@ -1053,19 +1242,11 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
     </section></div>}
 
     {draftWarning && !shared && <p className="footnote" role="status" style={{ padding: "0 24px 24px" }}>{draftWarning}</p>}
-    {authOpen && <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget && !authBusy) closeAuth(); }}>
+    {authOpen && <div className="modal-backdrop auth-backdrop" onClick={e => { if (e.target === e.currentTarget && !authBusy) closeAuth(); }}>
       <section className="sheet auth-sheet" ref={authRef} role="dialog" aria-modal="true" aria-labelledby="auth-title">
-        <div className="sheet-handle" />
-        <div className="sheet-head">
-          <h2 id="auth-title">{authUser && authMode === "account" ? "내 계정" : authMode === "signup" ? "회원가입" : "로그인"}</h2>
-          <button type="button" aria-label="닫기" disabled={authBusy} onClick={closeAuth}>×</button>
-        </div>
+        <button className="auth-close" type="button" aria-label="닫기" disabled={authBusy} onClick={closeAuth}>×</button>
+        <div className="auth-welcome"><Brand className="auth-logo"/><p className="eyebrow">MY RECEIPTS, OUR MEMORIES</p><h2 id="auth-title">{authMode === "signup" ? <>나의 술깝,<br/>차곡차곡 모아봐요.</> : <>그날의 기록을<br/>다시 만나볼까요?</>}</h2><p>영수증도, 친구와의 약속도<br/>내 보관함에 오래 남겨요.</p></div>
         <>
-          <button className="secondary" type="button" disabled={authBusy} onClick={async()=>{setAuthBusy(true);setAuthError('');try{await googleLogin()}catch(e){setAuthError(e.message);setAuthBusy(false)}}}>Google로 계속하기</button>
-          <div className="auth-tabs" role="tablist" aria-label="로그인 방식">
-            <button type="button" role="tab" aria-pressed={authMode === "login"} disabled={authBusy} onClick={() => { setAuthMode("login"); setAuthError(""); setAuthStatus(""); }}>로그인</button>
-            <button type="button" role="tab" aria-pressed={authMode === "signup"} disabled={authBusy} onClick={() => { setAuthMode("signup"); setAuthError(""); setAuthStatus(""); }}>회원가입</button>
-          </div>
           <form onSubmit={submitAuth} noValidate>
             <label className="field">이메일<input type="email" autoComplete="email" inputMode="email" maxLength={120} placeholder="you@example.com" value={authEmail} disabled={authBusy} onChange={e => { setAuthEmail(e.target.value); setAuthError(""); }} /></label>
             <label className="field password-field">비밀번호
@@ -1076,23 +1257,29 @@ export default function App({ createLink = createShareLink, analyzeInput = analy
             {authStatus && <p className="status" role="status">{authStatus}</p>}
             <button className="primary" type="submit" disabled={authBusy}>{authBusy ? "처리 중…" : authMode === "signup" ? "가입하기" : "로그인"}</button>
           </form>
+          <div className="auth-divider"><span>또는</span></div>
+          <button className="secondary google-auth" type="button" disabled={authBusy} onClick={async()=>{setAuthBusy(true);setAuthError('');try{await googleLogin()}catch(e){setAuthError(e.message);setAuthBusy(false)}}}><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2.1H12v4h5.4a4.6 4.6 0 0 1-2 3v2.5h3.3c1.9-1.8 2.9-4.3 2.9-7.4z"/><path fill="#34A853" d="M12 22c2.7 0 5-0.9 6.7-2.4l-3.3-2.5c-.9.6-2 .9-3.4.9-2.6 0-4.8-1.8-5.6-4.1H3v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 13.9a6 6 0 0 1 0-3.8V7.5H3a10 10 0 0 0 0 9z"/><path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A9.6 9.6 0 0 0 12 2a10 10 0 0 0-9 5.5l3.4 2.6C7.2 7.8 9.4 6 12 6z"/></svg>Google로 계속하기</button>
           <p className="auth-switch">
             <button type="button" className="link-button" disabled={authBusy} onClick={() => { setAuthMode(authMode === "signup" ? "login" : "signup"); setAuthError(""); setAuthStatus(""); }}>
               {authMode === "signup" ? "이미 계정이 있나요? 로그인" : "계정이 없나요? 회원가입"}
             </button>
           </p>
-          <p className="footnote">로그인하면 영수증과 약속을 마이페이지에서 모아볼 수 있어요.</p>
+          <p className="auth-note">가입 없이도 영수증을 만들고 공유할 수 있어요.</p>
         </>
       </section>
     </div>}
     {sheetOpen && record && <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget && !shareBusy) setSheetOpen(false); }}>
-      <section className="sheet" ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby="share-title"><div className="sheet-handle" />
-        <div className="sheet-head"><h2 id="share-title">함께할 미션 고르기</h2><button aria-label="닫기" disabled={shareBusy} onClick={() => { setSheetOpen(false); setShareStatus(""); setManualCopy(false); }}>×</button></div>
-        <label className="field">영수증 위에 전할 한마디<textarea maxLength={160} rows={2} value={friendMessage} disabled={shareBusy} onChange={e=>setFriendMessage(e.target.value)} placeholder="다음엔 맛있는 거 먹자."/></label><p className="connection-intro">친구와 하고 싶은 미션을 자유롭게 골라주세요.<br />큰 약속부터 오늘 할 수 있는 일까지 있어요.</p>
+      <section className="sheet share-composer" ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby="share-title"><div className="sheet-handle" />
+        <div className="sheet-head"><h2 id="share-title">{sharePurpose === "mission" ? "우리의 다음 약속" : "친구에게 영수증 보내기"}</h2><button aria-label="닫기" disabled={shareBusy} onClick={() => { setSheetOpen(false); setShareStatus(""); setManualCopy(false); }}>×</button></div>
+        <div className="composer-receipt"><Brand/><div><small>함께 보낼 영수증</small><strong>{record.occasion}</strong><span>{record.date} · {record.people}명</span></div></div>
+        <label className="field message-card">친구에게 한마디 <small>선택</small><textarea aria-label="친구에게 한마디" maxLength={160} rows={3} value={friendMessage} disabled={shareBusy} onChange={e=>{setFriendMessage(e.target.value);setShareStatus('');setManualCopy(false)}} placeholder="이 정도는 마셔야지 ㅋㅋ 너는 몇 %가 최대야?"/><span className="message-foot"><span>친구가 열면 영수증 위에 표시돼요.</span><span>{friendMessage.length}/160</span></span></label>
+        {sharePurpose === "mission" && <><p className="connection-intro">친구와 다음에 함께하고 싶은 일을 골라봐요.</p>
         <p className="mission-counter" role="status">{chosenMissions.length}개 선택 · 모두 완료하면 최대 {formatTime(recoveredMinutes(record, chosenMissions))}<small>복원 합계는 청구 수명 {formatTime(record.minutes)}까지만 적용돼요.</small></p>
         <MissionChoices checked={chosenMissions} disabled={shareBusy} onToggle={id => { setChosenMissions(old => old.includes(id) ? old.filter(value => value !== id) : [...old, id]); setShareStatus(""); setManualCopy(false); }} />
-        <button className="primary mission-submit" disabled={shareBusy || !chosenMissions.length} onClick={sendLink}><ShareIcon />{shareBusy ? "준비 중…" : activeLink ? "친구에게 미션 보내기" : "미션 링크 만들기"}</button>
+        </>}
+        <button className="primary mission-submit" disabled={shareBusy || (sharePurpose === "mission" && !chosenMissions.length)} onClick={sendLink}><ShareIcon />{shareBusy ? "링크 만드는 중…" : activeLink ? "친구에게 보내기" : sharePurpose === "mission" ? "미션 링크 만들기" : "공유 링크 만들기"}</button>
         {shareControls}
+        {activeLink && <div className="composer-exports"><button disabled={saving} onClick={save}>영수증 이미지 저장</button><button disabled={saving} onClick={saveStory}>스토리 이미지 저장</button></div>}
         <p className="footnote">{NOTICE}</p>
       </section>
     </div>}

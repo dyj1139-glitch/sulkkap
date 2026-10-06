@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import QRCode from 'qrcode';
+import {receiptQR} from './qr.js';
 import {db,call,ensureGuest,finishLogin,shareUrl} from './social.js';
 export function Room({id,minutes,formatTime}){
  const [rows,setRows]=useState([]),[ready,setReady]=useState(false),[error,setError]=useState(''),[title,setTitle]=useState(''),[busy,setBusy]=useState(false),[live,setLive]=useState(false),[retry,setRetry]=useState(0);const loadRef=useRef(()=>{}),sequence=useRef(0),lock=useRef(false),addId=useRef(null);
@@ -18,5 +18,35 @@ export function Room({id,minutes,formatTime}){
  <div className="recovered" aria-live="polite"><p>함께 돌려받은 청구 수명</p><strong className="recovery-total">+{formatTime(recovered)}</strong><p>남은 청구 수명 {formatTime(Math.max(0,minutes-recovered))}</p></div><p className="footnote">같은 미션은 한 번만 합산해요. 누구든 체크를 해제할 수 있으며 복원 합계는 원래 청구 수명을 넘지 않아요.</p></section>
 }
 export function History({onOpen}){const [data,setData]=useState(null),[error,setError]=useState(''),[tick,setTick]=useState(0);useEffect(()=>{let active=true;(async()=>{try{await finishLogin();const d=await call('sk_history');if(active){setData(d);setError('')}}catch(e){if(active)setError(e.message)}})();return()=>active=false},[tick]);return <section><h3>내 영수증</h3>{error&&<p role="alert">{error}<button className="link-button" onClick={()=>setTick(n=>n+1)}>저장 다시 시도</button></p>}{!data&&!error&&<p>기록을 불러오는 중…</p>}{data?.receipts?.map(x=><button className="secondary" key={x.record.id} onClick={()=>onOpen(x.record)}>{x.record.occasion} · {x.record.date}</button>)}{data?.receipts?.length===0&&<p>아직 보관한 영수증이 없어요.</p>}<h3>참여한 약속</h3>{data?.rooms?.map(r=><p key={r.id}><a href={shareUrl(r.id)}>{r.occasion} · {r.purpose==='mission'?'함께한 약속':'공유 영수증'}</a></p>)}</section>}
-export function ReceiptQR({url}){const [image,setImage]=useState('');useEffect(()=>{let alive=true;setImage('');if(url)QRCode.toDataURL(url,{width:180,margin:4,errorCorrectionLevel:'M'}).then(v=>{if(alive)setImage(v)}).catch(()=>{});return()=>alive=false},[url]);return image?<div style={{textAlign:'center',padding:'18px 0'}}><img src={image} width="100" height="100" alt="이 영수증 공유 링크 QR"/><p style={{fontSize:12}}>내 술깝도 확인해보세요.</p></div>:null}
-export async function socialImage(blob,url,record,story=false){const base=await createImageBitmap(blob),qr=await createImageBitmap(await (await fetch(await QRCode.toDataURL(url,{width:280,margin:4})) ).blob());const c=document.createElement('canvas');c.width=story?1080:640;c.height=story?1920:base.height+280;const ctx=c.getContext('2d');ctx.fillStyle='#ecedec';ctx.fillRect(0,0,c.width,c.height);if(story){ctx.fillStyle='#203e34';ctx.textAlign='center';ctx.font='bold 56px sans-serif';ctx.fillText('당신의 술값 영수증',540,120);ctx.fillStyle='#222';ctx.font='36px sans-serif';ctx.fillText(record.occasion.slice(0,22),540,190);const scale=Math.min(780/base.width,1280/base.height);ctx.drawImage(base,(1080-base.width*scale)/2,240,base.width*scale,base.height*scale);ctx.drawImage(qr,440,1560,200,200);ctx.fillStyle='#222';ctx.font='34px sans-serif';ctx.fillText('마신 술을 적고, 내 영수증 받아보기',540,1830);}else{ctx.drawImage(base,0,0);ctx.fillStyle='#fff';ctx.fillRect(0,base.height,640,280);ctx.drawImage(qr,230,base.height+8,180,180);ctx.fillStyle='#222';ctx.textAlign='center';ctx.font='22px sans-serif';ctx.fillText('내 술깝도 확인해보세요.',320,base.height+228);}base.close();qr.close();return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('이미지 저장 실패')),'image/png'));}
+
+export function ReceiptQR({url,busy=false,error='',retryToken=0,onRetry}) {
+ const [qr,setQr]=useState(null),[qrError,setQrError]=useState('');
+ useEffect(()=>{let alive=true;setQr(null);setQrError('');if(url)receiptQR(url).then(result=>{if(alive)setQr(result)}).catch(()=>{if(alive)setQrError('QR 이미지를 만들지 못했어요. 다시 시도해주세요.')});return()=>{alive=false}},[url,retryToken]);
+ const local=url && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(url).hostname);
+ return <div className="receipt-qr">
+   {qr ? <><img src={qr.dataUrl} width={qr.size} height={qr.size} alt="이 영수증과 약속을 여는 QR 코드"/><p>스캔하면 이 영수증으로 연결돼요.</p><small>{local?'테스트용 주소예요. 친구에게 보낼 때는 배포 주소에서 만들어주세요.':'친구와 함께한 그날, 한 장으로 남겨요.'}</small></>
+   : <><p role="status">{busy || (url&&!qrError) ? '공유 QR을 준비하고 있어요…' : '이 영수증을 QR로 남겨요.'}</p>{(error||qrError)&&<p className="qr-error" role="status">{error||qrError}</p>}{!busy&&(!url||qrError)&&onRetry&&<button className="qr-retry" onClick={onRetry}>QR 다시 만들기</button>}</>}
+ </div>;
+}
+export async function socialImage(blob,url,record,story=false) {
+ const {dataUrl,modules}=await receiptQR(url);
+ const [base,qr]=await Promise.all([createImageBitmap(blob),fetch(dataUrl).then(r=>r.blob()).then(createImageBitmap)]);
+ try {
+  const c=document.createElement('canvas'), footerSize=modules*Math.max(1,Math.min(5,Math.floor(480/modules)));
+  c.width=story?1080:640;c.height=story?1920:base.height+footerSize+122;
+  const ctx=c.getContext('2d');ctx.fillStyle='#ecedec';ctx.fillRect(0,0,c.width,c.height);
+  if(story){
+   ctx.fillStyle='#244b3d';ctx.textAlign='center';ctx.font='bold 54px sans-serif';ctx.fillText('술값은 냈는데, 술깝은 얼마?',540,110);
+   ctx.fillStyle='#5f6c60';ctx.font='32px sans-serif';ctx.fillText(record.occasion.slice(0,22),540,170);
+   const scale=Math.min(760/base.width,1170/base.height);ctx.drawImage(base,(1080-base.width*scale)/2,220,base.width*scale,base.height*scale);
+   const qrSize=modules*Math.max(1,Math.min(5,Math.floor(320/modules)));ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,(1080-qrSize)/2,1430,qrSize,qrSize);ctx.imageSmoothingEnabled=true;
+   ctx.fillStyle='#244b3d';ctx.font='bold 37px sans-serif';ctx.fillText('이번엔 내 영수증 받아보기',540,1840);
+  }else{
+   ctx.drawImage(base,0,0);ctx.fillStyle='#fefefc';ctx.fillRect(0,base.height-10,640,c.height-base.height+10);
+   ctx.imageSmoothingEnabled=false;ctx.drawImage(qr,(640-footerSize)/2,base.height+20,footerSize,footerSize);ctx.imageSmoothingEnabled=true;
+   ctx.fillStyle='#244b3d';ctx.textAlign='center';ctx.font='22px sans-serif';ctx.fillText('스캔하면 이 영수증으로 연결돼요.',320,base.height+footerSize+66);
+   ctx.fillStyle='#6c7665';ctx.font='16px monospace';ctx.fillText('SULKKAP / SEE YOU NEXT TIME',320,base.height+footerSize+99);
+  }
+  return await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('이미지 저장 실패')),'image/png'));
+ }finally{base.close();qr.close();}
+}
